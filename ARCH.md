@@ -5,17 +5,61 @@
 
 >I will, in fact, claim that the difference between a bad programmer and a good one is whether he considers his code or his data structures more important. Bad programmers worry about the code. Good programmers worry about data structures and their relationships. - The other Linus (Torvalds)
 
-### Buffer (`KyBuffer`)
+### Buffer
+
+```go
+type interface Buffer {
+    DoOp(Op)
+    UndoOp(Op)
+}
+
+// zero value is init
+type ArrayBuffer struct {
+    Value string
+}
+
+// zero value is init
+type RopeBuffer struct {
+    Rope   Rope
+}
+```
 
 A buffer holds some string data. A buffer is usually backed by a file on disk, but can optionally also have no backing file, or be backed by standard input. A buffer holds the rope data structure that represents the string contents.
 
+We'll first build an MVP implementation of the buffer 
+
 ### Rope
+
+```go
+// zero value is init
+type Rope struct {
+    Left  Rope
+    Right Rope
+    Len   int
+    Val   string
+}
+
+func (r Rope) Serialize() string
+```
 
 A [rope](https://en.wikipedia.org/wiki/Rope_(data_structure)) is a way to efficiently represent string data such that insertion-deletion operations are fast. Ky uses ropes to represent files being edited, so edits are fast.
 
 In addition to the standard rope data structure, Ky uses heuristics around line breaks and delimiters to be smarter about calculating ropes for structured text formats like code and markdown.
 
-### Model (`KyModel`)
+### Model
+
+```go
+// zero value is init
+type Model struct {
+    Cursor int
+    Buffer Buffer
+    Source io.ReadWriter
+}
+
+func (m Model) SpliceAtCursor(string, int)
+func (m Model) Splice(int, string, int)
+func (m Model) MoveCursor(int) // int is character offset
+```
 
 A model represents an instance of a buffer being edited. Alongside a reference to the file buffer, the model holds cursor position and viewport data alongside editor state like current model and action contexts.
 
@@ -23,19 +67,49 @@ A model also holds the information about the backing store of a buffer. This mea
 
 ### Split
 
+```go
+// zero value is init
+// if Left == nil || Right == nil, then Left, Right, and Model are all nil
+type Split struct {
+    IsVert bool
+    Pct    int
+    Left   Split
+    Right  Split
+    Model  Model
+}
+
+func (s Split) InsertLeft() Split
+func (s Split) InsertRight() Split
+func (s Split) InsertUp() Split
+func (s Split) InsertDown() Split
+func (s Split) Remove()
+```
+
 Ky represents its user interface as a tree of splits. Each split references one and only one model. A split contains information about how its children are laid out in the editor UI.
 
 ### Delta
+
+```go
+// zero value is init
+type Delta []Op
+```
 
 A delta is a set of updates to a buffer that represents an atomic edit operation in the editor model.
 
 ### Op
 
+```go
+// zero value is init
+type Op struct {
+    Index  int
+    Insert string
+    Delete int
+}
+```
+
 An Op is an atomic change dispatched from a model to a buffer, and is the only interface through which buffers and the corresponding ropes are modified.
 
-Most user actions will cause changes and calls to functions in `ky.model`, and the model will then dispatch an Op with new bytes and positions (rope indices) to the buffer. At each edit, a Delta is constructed by collating a sequence of Ops. Ops are thus micro-edits that are later grouped into deltas.
-
-Instead of an insert or delete op, Ky just has a single Op: splice. An Op (splice) includes a location, where to splice, what to add, and how much to delete. The buffer than applies the splice across potentially one or more rope nodes.
+Most user actions will cause changes and calls to functions in `ky.model`, and the model will then dispatch an Op with new bytes and positions (rope indices) to the buffer. At each edit, a Delta is constructed by collating a sequence of Ops. Ops are thus micro-edits that are later grouped into deltas. Instead of an insert or delete op, Ky just has a single Op: splice. An Op (splice) includes a location, where to splice, what to add, and how much to delete. The buffer than applies the splice across potentially one or more rope nodes.
 
 
 ## Embedded Ink runtime
