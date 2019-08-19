@@ -9,8 +9,8 @@
 
 ```go
 type interface Buffer {
-    DoOp(Op)
-    UndoOp(Op)
+    Apply(Op)
+    Revert(Op)
 }
 
 // zero value is init
@@ -39,7 +39,11 @@ type Rope struct {
     Val   string
 }
 
-func (r Rope) Serialize() string
+func (r Rope) Splice(int, string, int)
+// Prune ensures that all subtrees of a Rope node have
+// `Rope.Val` of length less than 40 charaters.bl
+func (r Rope) Prune()
+func (r Rope) Buffer() []byte
 ```
 
 A [rope](https://en.wikipedia.org/wiki/Rope_(data_structure)) is a way to efficiently represent string data such that insertion-deletion operations are fast. Ky uses ropes to represent files being edited, so edits are fast.
@@ -128,6 +132,12 @@ Functions in `ky.buffer` operates against the text buffer. Most editing operatio
 
 Functions in `ky.model` operates against editor models. Operations like saving/loading files and updating viewports and cursor positions are handled in `ky.model`.
 
+`ky.model` includes the following functions.
+
+- `spliceAtCursor`: maps to `Buffer.SpliceAtCursor`
+- `splice`: maps to `Buffer.Splice`
+- `moveCursor`: maps to `Buffer.MoveCursor`
+
 
 ## User interface
 
@@ -137,7 +147,11 @@ Ky is built for a terminal user interface and operates in [raw mode](https://vie
 
 Ky is a modal editor, and operates in one of three modes at any given time. They're modeled after Vim editor modes.
 
-- **View** mode
-- **Edit** mode
-- **Select** mode
+- **View** mode (Escape to switch)
+- **Edit** mode (e to switch)
+- **Select** mode (s to switch)
 
+- h, j, k, l to move by 1 unit up/down/left/right
+- H, J, K, L to move by 4 units up/down/left/right
+- C-u, C-d to move half-screen up or down
+- `>` to enter Ink command line
